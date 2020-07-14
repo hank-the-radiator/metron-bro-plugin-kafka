@@ -35,49 +35,49 @@ KafkaWriter::KafkaWriter(WriterFrontend* frontend):
    */
 
   // tag_json - thread local copy
-  tag_json = BifConst::Kafka::tag_json;
-  mocking = BifConst::Kafka::mock;
+  tag_json = zeek::BifConst::Kafka::tag_json; //bb
+  mocking = zeek::BifConst::Kafka::mock;	//bb
 
-  // json_timestamps
+  // zeek::BifConst::Kafka::json_timestamps
   ODesc tsfmt;
-  BifConst::Kafka::json_timestamps->Describe(&tsfmt);
-  json_timestamps.assign(
+  zeek::BifConst::Kafka::json_timestamps->Describe(&tsfmt);// bb
+  zeek::BifConst::Kafka::json_timestamps.assign(
       (const char*) tsfmt.Bytes(),
       tsfmt.Len()
     );
 
   // topic name - thread local copy
   topic_name.assign(
-    (const char*)BifConst::Kafka::topic_name->Bytes(),
-    BifConst::Kafka::topic_name->Len());
+    (const char*)zeek::BifConst::Kafka::topic_name->Bytes(),
+    zeek::BifConst::Kafka::topic_name->Len());
 
   // kafka_conf - thread local copy
-  Val* val = BifConst::Kafka::kafka_conf->AsTableVal();
-  IterCookie* c = val->AsTable()->InitForIteration();
+  zeek::Val* val = zeek::BifConst::Kafka::kafka_conf->AsTableVal();
+  zeek::IterCookie* c = val->AsTable()->InitForIteration();
   HashKey* k;
-  TableEntryVal* v;
+  zeek::TableEntryVal* v;
   while ((v = val->AsTable()->NextEntry(k, c))) {
 
       // fetch the key and value
-      ListVal* index = val->AsTableVal()->RecoverIndex(k);
-      string key = index->Index(0)->AsString()->CheckString();
-      string val = v->Value()->AsString()->CheckString();
-      kafka_conf.insert (kafka_conf.begin(), pair<string, string> (key, val));
+      zeek::ListVal* index = val->AsTableVal()->RecreateIndex(k);
+      std::string key = index->Idx(0)->AsString()->CheckString();
+      std::string val = v->GetVal()->AsString()->CheckString();
+      kafka_conf.insert (kafka_conf.begin(), std::pair<std::string,std::string> (key, val));
 
       // cleanup
       Unref(index);
       delete k;
   }
 
-  Val* mvals = BifConst::Kafka::additional_message_values->AsTableVal();
+  zeek::Val* mvals = zeek::BifConst::Kafka::additional_message_values->AsTableVal();
   c = val->AsTable()->InitForIteration();
   while ((v = mvals->AsTable()->NextEntry(k, c))) {
 
     // fetch the key and value
-    ListVal* index = mvals->AsTableVal()->RecoverIndex(k);
-    string key = index->Index(0)->AsString()->CheckString();
-    string val = v->Value()->AsString()->CheckString();
-    additional_message_values.insert (additional_message_values.begin(), pair<string, string> (key, val));
+    zeek::ListVal* index = mvals->AsTableVal()->RecreateIndex(k);
+    std::string key = index->Idx(0)->AsString()->CheckString();
+    std::string val = v->GetVal()->AsString()->CheckString();
+    additional_message_values.insert (additional_message_values.begin(), std::pair<std::string,std::string> (key, val));
 
     // cleanup
     Unref(index);
@@ -91,11 +91,11 @@ KafkaWriter::~KafkaWriter()
   // Cleanup must happen in DoFinish, not in the destructor
 }
 
-string KafkaWriter::GetConfigValue(const WriterInfo& info, const string name) const
+std::string KafkaWriter::GetConfigValue(const WriterInfo& info, const std::string name) const
 {
-    map<const char*, const char*>::const_iterator it = info.config.find(name.c_str());
+    std::map<const char*, const char*>::const_iterator it = info.config.find(name.c_str());
     if (it == info.config.end())
-        return string();
+        return std::string();
     else
         return it->second;
 }
@@ -129,28 +129,28 @@ bool KafkaWriter::DoInit(const WriterInfo& info, int num_fields, const threading
 
     /**
      * Format the timestamps
-     * NOTE: This string comparision implementation is currently the necessary
+     * NOTE: This std::string comparision implementation is currently the necessary
      * way to do it, as there isn't a way to pass the Zeek enum into C++ enum.
      * This makes the user interface consistent with the existing Zeek Logging
      * configuration for the ASCII log output.
      */
-    if ( strcmp(json_timestamps.c_str(), "JSON::TS_EPOCH") == 0 ) {
+    if ( strcmp(zeek::BifConst::Kafka::json_timestamps.c_str(), "JSON::TS_EPOCH") == 0 ) {
       tf = threading::formatter::JSON::TS_EPOCH;
     }
-    else if ( strcmp(json_timestamps.c_str(), "JSON::TS_MILLIS") == 0 ) {
+    else if ( strcmp(zeek::BifConst::Kafka::json_timestamps.c_str(), "JSON::TS_MILLIS") == 0 ) {
       tf = threading::formatter::JSON::TS_MILLIS;
     }
-    else if ( strcmp(json_timestamps.c_str(), "JSON::TS_ISO8601") == 0 ) {
+    else if ( strcmp(zeek::BifConst::Kafka::json_timestamps.c_str(), "JSON::TS_ISO8601") == 0 ) {
       tf = threading::formatter::JSON::TS_ISO8601;
     }
     else {
       Error(Fmt("KafkaWriter::DoInit: Invalid JSON timestamp format %s",
-        json_timestamps.c_str()));
+        zeek::BifConst::Kafka::json_timestamps.c_str()));
       return false;
     }
 
     // initialize the formatter
-    if(BifConst::Kafka::tag_json) {
+    if(zeek::BifConst::Kafka::tag_json) {
       formatter = new threading::formatter::TaggedJSON(info.path, this, tf);
     }
     else {
@@ -158,22 +158,22 @@ bool KafkaWriter::DoInit(const WriterInfo& info, int num_fields, const threading
     }
 
     // is debug enabled
-    string debug;
-    debug.assign((const char*)BifConst::Kafka::debug->Bytes(), BifConst::Kafka::debug->Len());
+    std::string debug;
+    debug.assign((const char*)zeek::BifConst::Kafka::debug->Bytes(), zeek::BifConst::Kafka::debug->Len());
     bool is_debug(!debug.empty());
     if(is_debug) {
       MsgThread::Info(Fmt("Debug is turned on and set to: %s.  Available debug context: %s.", debug.c_str(), RdKafka::get_debug_contexts().c_str()));
     }
 
     // kafka global configuration
-    string err;
+    std::string err;
     conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
 
     // apply the user-defined settings to kafka
-    map<string,string>::iterator i;
+    std::map<std::string,std::string>::iterator i;
     for (i = kafka_conf.begin(); i != kafka_conf.end(); ++i) {
-      string key = i->first;
-      string val = i->second;
+      std::string key = i->first;
+      std::string val = i->second;
 
       // apply setting to kafka
       if (RdKafka::Conf::CONF_OK != conf->set(key, val, err)) {
@@ -183,8 +183,8 @@ bool KafkaWriter::DoInit(const WriterInfo& info, int num_fields, const threading
     }
 
     if(is_debug) {
-        string key("debug");
-        string val(debug);
+        std::string key("debug");
+        std::string val(debug);
         if (RdKafka::Conf::CONF_OK != conf->set(key, val, err)) {
             Error(Fmt("Failed to set '%s'='%s': %s", key.c_str(), val.c_str(), err.c_str()));
             return false;
@@ -225,7 +225,7 @@ bool KafkaWriter::DoFinish(double network_time)
     bool success = false;
     int poll_interval = 1000;
     int waited = 0;
-    int max_wait = BifConst::Kafka::max_wait_on_shutdown;
+    int max_wait = zeek::BifConst::Kafka::max_wait_on_shutdown;
 
     if (!mocking) {
         // wait a bit for queued messages to be delivered
@@ -262,7 +262,7 @@ bool KafkaWriter::DoWrite(int num_fields, const threading::Field* const* fields,
         buff.Clear();
 
         // format the log entry
-      if(BifConst::Kafka::tag_json) {
+      if(zeek::BifConst::Kafka::tag_json) {
           dynamic_cast<threading::formatter::TaggedJSON*>(formatter)->Describe(&buff, num_fields, fields, vals,
                               additional_message_values);
        } else {
@@ -278,7 +278,7 @@ bool KafkaWriter::DoWrite(int num_fields, const threading::Field* const* fields,
         if (RdKafka::ERR_NO_ERROR == resp) {
             producer->poll(0);
         } else {
-            string err = RdKafka::err2str(resp);
+            std::string err = RdKafka::err2str(resp);
             Error(Fmt("Kafka send failed: %s", err.c_str()));
         }
     }
@@ -343,10 +343,10 @@ bool KafkaWriter::DoHeartbeat(double network_time, double current_time)
  * Triggered when the topic is resolved from the configuration, when mocking/testing
  * @param topic
  */
-void KafkaWriter::raise_topic_resolved_event(const string topic) {
+void KafkaWriter::raise_topic_resolved_event(const std::string topic) {
     if (kafka_topic_resolved_event) {
         val_list *vl = new val_list;
-        vl->append(new StringVal(topic.c_str()));
-        mgr.QueueEvent(kafka_topic_resolved_event, vl);
+        vl->append(new zeek::StringVal(topic.c_str()));
+        mgr.Enqueue(kafka_topic_resolved_event, vl);
     }
 }
